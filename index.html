@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>SF2 Car Bonus</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a6aa0;
+            background: linear-gradient(180deg, #1a6aa0 0%, #1a5a8a 55%, #8b7355 55%, #7a6040 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial Black', sans-serif;
+            user-select: none;
+        }
+
+        #ui {
+            color: #FFD700;
+            font-size: 22px;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            cursor: crosshair;
+        }
+
+        #msg {
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 8px;
+            text-shadow: 1px 1px 0 #000;
+            letter-spacing: 1px;
+            min-height: 22px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="ui">🥊 CAR BONUS STAGE 🥊</div>
+    <canvas id="game" width="800" height="380"></canvas>
+    <div id="msg" id="msg">Click the car to smash it!</div>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const msgEl = document.getElementById('msg');
+
+        // ── Sprite yükleme ──────────────────────────────────────────
+        const sprites = {};
+        const IDS = [
+            '00', '01', '02', '03', '04', '05', '06', '07', '08', '09',
+            '10', '11', '12', '13', '15', '16', '17', '18', '19', '20',
+            '21', '22', '23', '24', '25', '26', '27', '28', '29',
+            '30', '31', '32', '33', '34', '35', '36', '37', '38', '39',
+            '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51'
+        ];
+        let loaded = 0;
+        IDS.forEach(id => {
+            const im = new Image();
+            im.src = `sprites/sprite_${id}.png`;
+            im.onload = () => { if (++loaded === IDS.length) init(); };
+            sprites[id] = im;
+        });
+        const S = id => sprites[id];
+
+        // ── Sabitler ────────────────────────────────────────────────
+        const SC = 2;           // 2× ölçek
+        const CX = 400;         // arabanın merkez X
+        const GROUND_Y = 340;         // zemin Y
+
+        // sprite_00 = tek şase (186×82)
+        // sprite_02 = tam yeşil araba (187×85)
+        // Şase zemine otursun; yeşil araba şasenin üstüne binsin ama
+        // tekerlekler görünsün diye ARABANIN ALT KENARI  =  zemin - teker yüksekliği
+        // sprite_00'ı incelersek teker yarıçapı yaklaşık 20px → scaled = 40px
+        const TIRE_H = 20 * SC;     // teker yüksekliği (scaled)
+
+        // Hasar evreleri: sprite_02 → '07' → '08' → ... → '15'
+        // sprite_14 yoktu — atlıyoruz
+        const STAGES = ['02', '07', '08', '09', '10', '11', '12', '13', '15'];
+
+        // Efekt animasyon dizileri
+        const GLASS_ANIM = ['22', '23', '24', '25', '26', '27', '28'];
+        const FIRE_ANIM = ['43', '44', '45'];
+        const STEAM_ANIM = ['46', '47', '48'];
+        const SMOKE_ANIM = ['40', '41', '42'];
+        const DEBRIS_IDS = ['29', '30', '31', '32', '33', '34', '35', '36', '37'];
+
+        // ── Durum ───────────────────────────────────────────────────
+        let stageIdx = 0;
+        let hitCount = 0;
+        let finished = false;
+
+        // Her evreye kaç vuruş gerekli
+        const HITS_PER_STAGE = [3, 3, 3, 4, 4, 4, 5, 5];
+
+        const particles = [];   // geçici efektler
+        const persistFx = [];   // kalıcı son sahne dumanları
+
+        // ── Yardımcı: scaled boyutlar ────────────────────────────────
+        function sw(id) { return S(id).naturalWidth * SC; }
+        function sh(id) { return S(id).naturalHeight * SC; }
+
+        // ── Koordinat hesabı ─────────────────────────────────────────
+        // Şase: temeli zeminle hizalanmış, tam ortalı
+        function chassisRect() {
+            const w = sw('00'), h = sh('00');
+            return { x: CX - w / 2 - 8, y: GROUND_Y - h - 12, w, h };
+        }
+        // Yeşil kasa: alt kenarı = zemin - teker yüksekliği  (tekerlekler dışarı taşsın)
+        function carRect(id) {
+            const w = sw(id), h = sh(id);
+            const y = GROUND_Y - TIRE_H - h;
+            return { x: CX - w / 2, y, w, h };
+        }
+        // Güncel kasa rect'i
+        function currentCarRect() { return carRect(STAGES[stageIdx]); }
+
+        // ── Parçacık üretici fonksiyonlar ───────────────────────────
+        function spawnGlass(x, y) {
+            particles.push({
+                type: 'anim', frames: GLASS_ANIM,
+                fi: 0, timer: 0, speed: 3, persist: false,
+                x, y, scale: 1.4
+            });
+        }
+
+        function spawnDebris(x, y, count = 3) {
+            for (let i = 0; i < count; i++) {
+                const id = DEBRIS_IDS[Math.floor(Math.random() * DEBRIS_IDS.length)];
+                particles.push({
+                    type: 'physics', id,
+                    x: x + (Math.random() - 0.5) * 40,
+                    y,
+                    vx: (Math.random() - 0.5) * 7,
+                    vy: -Math.random() * 6 - 3,
+                    gy: 0.35,
+                    life: 90, maxLife: 90
+                });
+            }
+        }
+
+        function spawnExplosion(x, y) {
+            particles.push({ type: 'anim', frames: FIRE_ANIM, fi: 0, timer: 0, speed: 4, persist: false, x, y: y - 20, scale: 2.2 });
+            particles.push({ type: 'anim', frames: STEAM_ANIM, fi: 0, timer: 0, speed: 5, persist: false, x: x + 25, y: y - 15, scale: 1.8 });
+            spawnDebris(x, y, 5);
+        }
+
+        function spawnFinalSmoke() {
+            const cr = chassisRect();
+            // 3 kalıcı duman noktası şase üstünde
+            const pts = [
+                { ox: -cr.w * 0.28, oy: -0.6, frames: FIRE_ANIM, fi: 0, speed: 5, scale: 1.6 },
+                { ox: 0, oy: -0.7, frames: STEAM_ANIM, fi: 1, speed: 6, scale: 2.0 },
+                { ox: cr.w * 0.28, oy: -0.5, frames: SMOKE_ANIM, fi: 0, speed: 7, scale: 1.4 },
+            ];
+            pts.forEach(p => {
+                persistFx.push({
+                    type: 'anim', frames: p.frames,
+                    fi: p.fi, timer: 0, speed: p.speed, persist: true,
+                    x: CX + p.ox,
+                    y: cr.y + cr.h * p.oy,
+                    scale: p.scale
+                });
+            });
+        }
+
+        // ── Tıklama ─────────────────────────────────────────────────
+        canvas.addEventListener('pointerdown', e => {
+            if (finished) return;
+            const r = canvas.getBoundingClientRect();
+            const mx = (e.clientX - r.left) * (canvas.width / r.width);
+            const my = (e.clientY - r.top) * (canvas.height / r.height);
+
+            const cr = currentCarRect();
+            if (mx < cr.x || mx > cr.x + cr.w || my < cr.y || my > cr.y + cr.h) return;
+
+            hitCount++;
+            const needed = HITS_PER_STAGE[stageIdx] ?? 5;
+            const big = (hitCount % needed === 0);
+
+            if (big) {
+                spawnExplosion(mx, my);
+                stageIdx = Math.min(stageIdx + 1, STAGES.length - 1);
+            } else {
+                spawnGlass(mx, my);
+                spawnDebris(mx, my, 2);
+            }
+
+            if (stageIdx === STAGES.length - 1 && !finished) {
+                finished = true;
+                spawnFinalSmoke();
+                msgEl.textContent = '🏆 BONUS!  CAR DESTROYED! 🏆';
+            } else {
+                const msgs = ['💥 HIT!', '💥 CRACK!', '💥 SMASH!', '💥 CRUNCH!', '💥 BASH!'];
+                msgEl.textContent = msgs[Math.floor(Math.random() * msgs.length)];
+            }
+        });
+
+        // ── Güncelleme ───────────────────────────────────────────────
+        function update() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                if (p.type === 'physics') {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += p.gy;
+                    if (--p.life <= 0) { particles.splice(i, 1); continue; }
+                } else {
+                    if (++p.timer >= p.speed) {
+                        p.timer = 0;
+                        if (++p.fi >= p.frames.length) {
+                            if (!p.persist) { particles.splice(i, 1); continue; }
+                            p.fi = 0;
+                        }
+                    }
+                }
+            }
+            persistFx.forEach(p => {
+                if (++p.timer >= p.speed) {
+                    p.timer = 0;
+                    p.fi = (p.fi + 1) % p.frames.length;
+                }
+            });
+        }
+
+        // ── Çizim ───────────────────────────────────────────────────
+        function drawImg(id, x, y, sc = SC) {
+            const im = S(id);
+            ctx.drawImage(im, x, y, im.naturalWidth * sc, im.naturalHeight * sc);
+        }
+        function drawAnim(p) {
+            const id = p.frames[p.fi];
+            const im = S(id);
+            if (!im) return;
+            const sc = (p.scale || 1) * SC;
+            ctx.drawImage(im,
+                p.x - im.naturalWidth * sc / 2,
+                p.y - im.naturalHeight * sc / 2,
+                im.naturalWidth * sc, im.naturalHeight * sc);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. ŞASE (zemine hizalı, tek parça, sprite_00)
+            const ch = chassisRect();
+            drawImg('00', ch.x, ch.y);
+
+            // 2. YEŞİL KASA (şase üstünde, tekerlekler dışarı taşıyor)
+            const cr = currentCarRect();
+            drawImg(STAGES[stageIdx], cr.x, cr.y);
+
+            // 3. Kalıcı son dumanlar
+            persistFx.forEach(drawAnim);
+
+            // 4. Anlık efektler
+            particles.forEach(p => {
+                if (p.type === 'physics') {
+                    const im = S(p.id);
+                    if (!im) return;
+                    ctx.globalAlpha = p.life / p.maxLife;
+                    ctx.drawImage(im,
+                        p.x - im.naturalWidth * SC / 2,
+                        p.y - im.naturalHeight * SC / 2,
+                        im.naturalWidth * SC, im.naturalHeight * SC);
+                    ctx.globalAlpha = 1;
+                } else {
+                    drawAnim(p);
+                }
+            });
+
+            // Zemin gölgesi
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.ellipse(CX, GROUND_Y + 2, ch.w * 0.48, 9, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // ── Ana döngü ────────────────────────────────────────────────
+        function init() {
+            (function loop() { update(); draw(); requestAnimationFrame(loop); })();
+        }
+    </script>
+</body>
+
+</html>
