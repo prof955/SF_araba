@@ -1,380 +1,1095 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SF2 Car Bonus</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Street Fighter II - Bonus Stage: Car Smash</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            background: linear-gradient(180deg, #1a6aa0 0%, #1a5a8a 55%, #8b7355 55%, #7a6040 100%);
+            background: #0a0b10;
+            color: #fff;
+            font-family: 'Press Start 2P', monospace;
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
-            height: 100vh;
-            font-family: 'Arial Black', sans-serif;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 16px;
             user-select: none;
+            overflow-x: hidden;
         }
-        #ui { color: #FFD700; font-size: 22px; font-weight: bold;
-              text-shadow: 2px 2px 0 #000; margin-bottom: 10px; letter-spacing: 2px; }
-        canvas { image-rendering: pixelated; image-rendering: crisp-edges; cursor: crosshair; }
-        #msg { color: #fff; font-size: 16px; font-weight: bold; margin-top: 8px;
-               text-shadow: 1px 1px 0 #000; letter-spacing: 1px; min-height: 22px; }
+
+        /* ─── ARCADE SCREEN WRAPPER ─── */
+        #cabinet-frame {
+            position: relative;
+            width: 100%;
+            max-width: 960px;
+            background: #14161f;
+            padding: 12px;
+            border-radius: 12px;
+            border: 3px solid #2e3440;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9), 0 0 25px rgba(229, 37, 33, 0.25);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        #screen-bezel {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 768 / 448;
+            background: #000;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 2px solid #3b4252;
+            box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.9);
+            cursor: crosshair;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        /* Scanline Overlay for subtle authentic CRT texture */
+        #screen-bezel::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        /* ─── CONTROLS TOOLBAR ─── */
+        #toolbar {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 4px;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .btn {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 9px;
+            padding: 8px 12px;
+            background: #1e222d;
+            color: #d8dee9;
+            border: 2px solid #434c5e;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.1s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background: #2e3440;
+            color: #eceff4;
+            border-color: #88c0d0;
+            transform: translateY(-1px);
+        }
+
+        .btn.active {
+            background: #e52521;
+            color: #fff;
+            border-color: #ffd700;
+            box-shadow: 0 0 12px rgba(229, 37, 33, 0.6);
+        }
+
+        .btn-secondary {
+            background: #2b303c;
+            border-color: #4c566a;
+        }
+        .btn-secondary:hover {
+            border-color: #ffd700;
+            color: #ffd700;
+        }
+
+        /* ─── HINTS BAR ─── */
+        #hint-bar {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            font-size: 8px;
+            color: #6c757d;
+            letter-spacing: 1px;
+            padding: 0 4px;
+        }
     </style>
 </head>
 <body>
-<div id="ui">🥊 CAR BONUS STAGE 🥊</div>
-<canvas id="game" width="800" height="420"></canvas>
-<div id="msg">Click the car to smash it!</div>
+
+<div id="cabinet-frame">
+    <div id="screen-bezel">
+        <canvas id="game" width="768" height="448"></canvas>
+    </div>
+
+    <div id="toolbar">
+        <div class="btn-group">
+            <button class="btn active" id="btn-lp" onclick="setAttack('lp')">
+                <span>[1] 🥊</span> <span>LIGHT PUNCH</span>
+            </button>
+            <button class="btn" id="btn-hp" onclick="setAttack('hp')">
+                <span>[2] 💥</span> <span>HEAVY PUNCH</span>
+            </button>
+            <button class="btn" id="btn-kick" onclick="setAttack('kick')">
+                <span>[3] 🦶</span> <span>FIERCE KICK</span>
+            </button>
+            <button class="btn" id="btn-sp" onclick="setAttack('sp')">
+                <span>[4] ⚡</span> <span>SPECIAL SMASH</span>
+            </button>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-secondary" id="btn-sfx" onclick="toggleAudio()">
+                🔊 SFX: ON
+            </button>
+            <button class="btn btn-secondary" onclick="resetGame()">
+                🔄 RETRY
+            </button>
+        </div>
+    </div>
+
+    <div id="hint-bar">
+        <span>CLICK CAR TO SMASH (DOORS / ROOF / HOOD / BUMPER)</span>
+        <span>KEYS: [1-4] ATTACKS • [SPACE] SMASH</span>
+    </div>
+</div>
 
 <script>
+// ═══════════════════════════════════════════════════════════════════════════
+// 1. PROCEDURAL 16-BIT WEB AUDIO SYNTHESIZER
+// ═══════════════════════════════════════════════════════════════════════════
+let audioCtx = null;
+let sfxEnabled = true;
+
+function initAudio() {
+    if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) audioCtx = new AudioContext();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function toggleAudio() {
+    initAudio();
+    sfxEnabled = !sfxEnabled;
+    const btn = document.getElementById('btn-sfx');
+    btn.textContent = sfxEnabled ? '🔊 SFX: ON' : '🔇 SFX: OFF';
+    btn.style.color = sfxEnabled ? '#d8dee9' : '#6c757d';
+}
+
+function playSound(type) {
+    if (!sfxEnabled) return;
+    initAudio();
+    if (!audioCtx) return;
+
+    const t = audioCtx.currentTime;
+
+    if (type === 'lp') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(240, t);
+        osc.frequency.exponentialRampToValueAtTime(45, t + 0.08);
+
+        gain.gain.setValueAtTime(0.5, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.08);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.09);
+    }
+    else if (type === 'hp') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, t);
+        osc.frequency.exponentialRampToValueAtTime(25, t + 0.18);
+
+        gain.gain.setValueAtTime(0.8, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.18);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.19);
+    }
+    else if (type === 'kick') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(190, t);
+        osc.frequency.exponentialRampToValueAtTime(35, t + 0.16);
+
+        gain.gain.setValueAtTime(0.65, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.16);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.17);
+    }
+    else if (type === 'sp') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(480, t);
+        osc.frequency.exponentialRampToValueAtTime(30, t + 0.35);
+
+        gain.gain.setValueAtTime(0.95, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.35);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.36);
+    }
+    else if (type === 'glass') {
+        for (let i = 0; i < 3; i++) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            const f = 2200 + Math.random() * 2200;
+            osc.frequency.setValueAtTime(f, t + i * 0.02);
+            osc.frequency.exponentialRampToValueAtTime(f * 0.45, t + i * 0.02 + 0.08);
+            gain.gain.setValueAtTime(0.35, t + i * 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + i * 0.02 + 0.08);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(t + i * 0.02);
+            osc.stop(t + i * 0.02 + 0.09);
+        }
+    }
+    else if (type === 'metal') {
+        [520, 840, 1260].forEach((f, idx) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(f, t);
+            gain.gain.setValueAtTime(0.3 / (idx + 1), t);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.22);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(t);
+            osc.stop(t + 0.23);
+        });
+    }
+    else if (type === 'collapse') {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(95, t);
+        osc.frequency.exponentialRampToValueAtTime(15, t + 0.55);
+        gain.gain.setValueAtTime(1.0, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.55);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t);
+        osc.stop(t + 0.56);
+    }
+    else if (type === 'victory') {
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((freq, idx) => {
+            const startTime = t + idx * 0.12;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, startTime);
+            gain.gain.setValueAtTime(0.35, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + 0.32);
+        });
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 2. SPRITES & ASSET ENGINE
+// ═══════════════════════════════════════════════════════════════════════════
 const canvas = document.getElementById('game');
-const ctx    = canvas.getContext('2d');
-const msgEl  = document.getElementById('msg');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
 
-// ─── SPRITE YÜKLEME ────────────────────────────────────────────────────────
+const bgImg = new Image();
+bgImg.src = 'bg_stage.png';
+
 const sprites = {};
-const IDS = [
-    '00','01','02','03','04','05','06','07','08','09',
-    '10','11','12','13','15','16','17','18','19','20',
-    '21','22','23','24','25','26','27','28','29',
-    '30','31','32','33','34','35','36','37','38','39',
-    '40','41','42','43','44','45','46','47','48','49','50','51'
+const SPRITE_IDS = [
+    'car_intact',
+    '00','01','02','03','04','06','07','08','09','10',
+    '11','12','13','14','15','16','17','18','19','20',
+    '21','22','23','24','25','26','27','28','29','30',
+    '31','32','33','34','35','36','37','38','39','40',
+    '41','42','43','44','45','46','47','48','49','50','51'
 ];
-let loaded = 0;
-IDS.forEach(id => {
-    const im = new Image();
-    im.src = `sprites/sprite_${id}.png`;
-    im.onload = () => { if (++loaded === IDS.length) init(); };
-    sprites[id] = im;
+
+let assetsToLoad = SPRITE_IDS.length + 1;
+let assetsLoaded = 0;
+
+function checkInit() {
+    if (++assetsLoaded >= assetsToLoad) {
+        initGame();
+    }
+}
+bgImg.onload = checkInit;
+
+SPRITE_IDS.forEach(id => {
+    const img = new Image();
+    img.src = `sprites/sprite_${id}.png`;
+    img.onload = checkInit;
+    sprites[id] = img;
 });
+
 const S = id => sprites[id];
-function sw(id) { return S(id).naturalWidth  * SC; }
-function sh(id) { return S(id).naturalHeight * SC; }
 
-// ─── SABİTLER ──────────────────────────────────────────────────────────────
-const SC       = 2;
-const CX       = 390;      // araba merkez X  (kullanıcı ayarlıyor)
-const GROUND_Y = 360;      // zemin Y
-const TIRE_H   = 20 * SC;  // teker yüksekliği (scaled)
+// Shard & Debris Arrays
+const GLASS_SHARDS = ['23','24','25','26','27','28','29'];
+const METAL_PIECES = ['30','31','32','33','34','35','36','37'];
+const SPARK_PIECES = ['38','39','40'];
 
-// Şase konumu (kullanıcı -8 ve -12 ile ayarlamıştı, koruyoruz)
-const CHASSIS_OX = -8;     // X offset
-const CHASSIS_OY = -12;    // Y offset
+// Animation Loops
+const ANIM_SMOKE = ['41','42','43'];
+const ANIM_FIRE  = ['44','45','46'];
+const ANIM_STEAM = ['47','48','49'];
+const ANIM_PUFF  = ['50','51'];
 
-// ─── HASAR AŞAMALARI ───────────────────────────────────────────────────────
-// Ana sıra (genel hasar arttıkça)
-const STAGES = ['02','07','08','09','10','11','12','13','15'];
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. PIXEL-PERFECT STAGE GEOMETRY
+// ═══════════════════════════════════════════════════════════════════════════
+const SC       = 2;    // Native 2x scale
+const CX       = 384;  // Center X (768 / 2)
+const GROUND_Y = 380;  // Floor contact line for wheels
 
-// Bölgesel hasar sprite'ları — ilk vuruştaki "anlık" flash sprite'ı
-// (bunlar 1-2 frame gösterilip normaline dönecek)
-// sol üst = 03, sol ön = 04, ön = 06, sağ taraf mevcut sprite'larda yok ama 09/10 uygun
-const ZONE_FLASH = {
-    left  : '03',   // sol taraf hasarı (çatı sol)
-    center: '06',   // ön/orta hasar (tampon-ön ızgara)
-    right : '04',   // sağ taraf hasar (kapı sağ)
-    top   : '03',
-    bottom: '06'
+// Stage configuration: dx offset and height for every damage stage
+const STAGE_CONFIG = {
+    '02': { ch: '00', bd: '02', dx: 2,  h: 85, baselineOffset: 13 },
+    '07': { ch: '00', bd: '07', dx: 0,  h: 75, baselineOffset: 13 },
+    '08': { ch: '00', bd: '08', dx: 2,  h: 69, baselineOffset: 13 },
+    '09': { ch: '00', bd: '09', dx: 2,  h: 69, baselineOffset: 13 },
+    '10': { ch: '00', bd: '10', dx: 2,  h: 77, baselineOffset: 13 },
+    '11': { ch: '00', bd: '11', dx: 2,  h: 69, baselineOffset: 13 },
+    '12': { ch: '00', bd: '12', dx: 2,  h: 69, baselineOffset: 13 },
+    '13': { ch: '00', bd: '13', dx: 2,  h: 57, baselineOffset: 13 },
+    '15': { ch: '01', bd: '15', dx: 23, h: 45, baselineOffset: 4  }
 };
 
-// Bölge başına hasar sayaçları (toplamda STAGES ilerliyor)
-const zoneDmg    = { left:0, center:0, right:0, top:0, bottom:0 };
-let totalDmg     = 0;
-let stageIdx     = 0;
-let finished     = false;
+// ═══════════════════════════════════════════════════════════════════════════
+// 4. GAME STATE
+// ═══════════════════════════════════════════════════════════════════════════
+const MAX_HEALTH = 36;
+let currentAttack = 'lp';
+let totalDamage   = 0;
+let leftDamage    = 0;
+let rightDamage   = 0;
+let roofDamage    = 0;
+let hoodDamage    = 0;
 
-// Flash: kısa süreliğine gösterilecek overlay sprite
-let flashSprite  = null;  // '03' gibi bir id
-let flashTimer   = 0;
-const FLASH_DUR  = 6;     // frame sayısı
+let isFinished    = false;
+let score         = 0;
+let timer         = 40;
+let timerInterval = null;
+let comboCount    = 0;
+let comboTimer    = 0;
 
-// Sarsıntı
-let shakeMag     = 0;     // piksel cinsinden
-let shakeDecay   = 0.75;
+// Authentic Horizontal Impact Shudder (No boat rocking)
+let shudderTime   = 0;
+let shudderMag    = 0;
 
-// İlerleyici duman: stageIdx >= 5 olunca ara sıra duman pufu
-let smokePufTimer = 0;
+// Screen Shake
+let shakeTrauma   = 0;
+let hitStopFrames = 0;
 
-// ─── EFEKTLERİN ANİMASYON DİZİLERİ ───────────────────────────────────────
-const GLASS_ANIM = ['22','23','24','25','26','27','28'];
-const FIRE_ANIM  = ['43','44','45'];
-const STEAM_ANIM = ['46','47','48'];
-const SMOKE_ANIM = ['40','41','42'];
-const DEBRIS_IDS = ['29','30','31','32','33','34','35','36','37'];
+// Visual Effects & Particles
+const particles    = [];
+const persistentFx = [];
+const scorePopups  = [];
+const hitSparks    = [];
 
-const particles  = [];  // fizik + anim efektler
-const persistFx  = [];  // kalıcı dumanlar
+const ATTACK_DATA = {
+    lp:   { name: 'LIGHT PUNCH',   dmg: 1,  pts: 100,  shake: 3,  shudder: 4,  sfx: 'lp' },
+    hp:   { name: 'HEAVY PUNCH',   dmg: 2,  pts: 300,  shake: 8,  shudder: 8,  sfx: 'hp' },
+    kick: { name: 'FIERCE KICK',   dmg: 3,  pts: 500,  shake: 12, shudder: 11, sfx: 'kick' },
+    sp:   { name: 'SPECIAL SMASH', dmg: 5,  pts: 1000, shake: 18, shudder: 16, sfx: 'sp' }
+};
 
-// ─── GEOMETRİ HESAPLAMAlARI ───────────────────────────────────────────────
-function chassisRect() {
-    const w = sw('00'), h = sh('00');
-    return { x: CX - w/2 + CHASSIS_OX, y: GROUND_Y - h + CHASSIS_OY, w, h };
-}
-function carRect(stgId) {
-    const w = sw(stgId), h = sh(stgId);
-    return { x: CX - w/2, y: GROUND_Y - TIRE_H - h, w, h };
-}
-function currentCarRect() { return carRect(STAGES[stageIdx]); }
-
-// Tıklama koordinatından bölge belirle
-function getZone(mx, my, cr) {
-    const relX = (mx - cr.x) / cr.w;  // 0..1
-    const relY = (my - cr.y) / cr.h;  // 0..1
-    if (relY < 0.35) return 'top';
-    if (relY > 0.75) return 'bottom';
-    if (relX < 0.33) return 'left';
-    if (relX > 0.67) return 'right';
-    return 'center';
-}
-
-// ─── PARÇACIK YARDIMCILARI ────────────────────────────────────────────────
-function addAnim(x, y, frames, speed=4, scale=1.5, persist=false) {
-    particles.push({ type:'anim', x, y, frames, fi:0, timer:0, speed, scale, persist });
-}
-function addPhys(x, y, id, vx, vy, bounces=1) {
-    particles.push({
-        type:'physics', id, x, y, vx, vy,
-        gy:0.4, bounce:0.45, bounces, life:100, maxLife:100
+function setAttack(type) {
+    initAudio();
+    currentAttack = type;
+    ['btn-lp', 'btn-hp', 'btn-kick', 'btn-sp'].forEach(id => {
+        document.getElementById(id).classList.remove('active');
     });
+    const map = { lp: 'btn-lp', hp: 'btn-hp', kick: 'btn-kick', sp: 'btn-sp' };
+    if (map[type]) document.getElementById(map[type]).classList.add('active');
 }
 
-// Küçük cam efekti
-function spawnGlass(x, y) {
-    addAnim(x, y, GLASS_ANIM, 3, 1.6);
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. CAR DAMAGE STATE DETERMINATION
+// ═══════════════════════════════════════════════════════════════════════════
+function getCarState() {
+    let stageKey = '02';
+    let overlayL = null;
+    let overlayR = null;
+    let isPristine = (totalDamage === 0);
 
-// Küçük enkaz parçaları (bölgeye göre yön etkisi)
-function spawnDebris(x, y, zone, count=3) {
-    for (let i=0; i<count; i++) {
-        const id = DEBRIS_IDS[Math.floor(Math.random()*DEBRIS_IDS.length)];
-        let vx = (Math.random()-0.5)*8;
-        let vy = -Math.random()*6 - 3;
-        // Bölgeye göre yön ağırlığı
-        if (zone === 'left')   vx -= 2;
-        if (zone === 'right')  vx += 2;
-        if (zone === 'top')    vy -= 2;
-        if (zone === 'bottom') { vy = -Math.random()*3 - 1; }
-        addPhys(x+(Math.random()-0.5)*30, y, id, vx, vy);
-    }
-}
-
-// Büyük patlama (evre geçişinde)
-function spawnExplosion(x, y, zone) {
-    addAnim(x, y-20, FIRE_ANIM, 4, 2.2);
-    addAnim(x+(zone==='right'?30:-30), y-10, STEAM_ANIM, 5, 1.8);
-    spawnDebris(x, y, zone, 6);
-}
-
-// Bitim dumanları
-function spawnFinalSmoke() {
-    const ch = chassisRect();
-    [
-        { ox:-ch.w*0.28, oy:-0.55, frames:FIRE_ANIM,  fi:0, sp:5, sc:1.6 },
-        { ox: 0,         oy:-0.70, frames:STEAM_ANIM, fi:1, sp:6, sc:2.0 },
-        { ox: ch.w*0.28, oy:-0.45, frames:SMOKE_ANIM, fi:0, sp:7, sc:1.4 },
-    ].forEach(p => {
-        persistFx.push({
-            type:'anim', frames:p.frames,
-            fi:p.fi, timer:0, speed:p.sp, persist:true,
-            x: CX + p.ox, y: ch.y + ch.h * p.oy,
-            scale: p.sc
-        });
-    });
-}
-
-// Orta hasar duman pufu (tek seferlik küçük duman)
-function spawnSmokePuff() {
-    const ch = chassisRect();
-    const ox = (Math.random()-0.5)*ch.w*0.6;
-    addAnim(CX+ox, ch.y - 10, SMOKE_ANIM, 6, 1.0);
-}
-
-// ─── TIKLA / DOKUNMA ──────────────────────────────────────────────────────
-canvas.addEventListener('pointerdown', e => {
-    if (finished) return;
-    const r  = canvas.getBoundingClientRect();
-    const mx = (e.clientX - r.left) * (canvas.width  / r.width);
-    const my = (e.clientY - r.top ) * (canvas.height / r.height);
-
-    const cr = currentCarRect();
-    // Hem kasa hem de şase bölgesine tıklanabilir
-    const ch = chassisRect();
-    const inCar     = mx >= cr.x && mx <= cr.x+cr.w && my >= cr.y && my <= cr.y+cr.h;
-    const inChassis = mx >= ch.x && mx <= ch.x+ch.w && my >= ch.y && my <= ch.y+ch.h;
-    if (!inCar && !inChassis) return;
-
-    const zone = inCar ? getZone(mx, my, cr) : 'bottom';
-
-    // Bölge sayacını artır
-    zoneDmg[zone]++;
-    totalDmg++;
-
-    // Sarsıntı
-    shakeMag = 6;
-
-    // Flash sprite
-    flashSprite = ZONE_FLASH[zone] || null;
-    flashTimer  = FLASH_DUR;
-
-    // Evre ilerleme — toplam hasar bazlı
-    const thresholds = [3, 6, 9, 13, 17, 21, 26, 31];
-    const newStage   = thresholds.findIndex(t => totalDmg <= t);
-    const nextStage  = newStage === -1 ? STAGES.length-1 : newStage;
-
-    const stageChanged = nextStage > stageIdx;
-    if (stageChanged) {
-        stageIdx = nextStage;
-        spawnExplosion(mx, my, zone);
+    if (totalDamage >= 34) {
+        stageKey = '15';
+    } else if (totalDamage >= 28) {
+        stageKey = '13';
+    } else if (totalDamage >= 23) {
+        stageKey = '12';
+    } else if (totalDamage >= 18) {
+        stageKey = '11';
+    } else if (totalDamage >= 14) {
+        stageKey = '10';
+    } else if (totalDamage >= 10) {
+        stageKey = '09';
+    } else if (totalDamage >= 6) {
+        stageKey = '08';
+    } else if (totalDamage >= 3) {
+        stageKey = '07';
     } else {
-        spawnGlass(mx, my);
-        spawnDebris(mx, my, zone, 2);
-    }
-
-    // Son evre
-    if (stageIdx >= STAGES.length-1 && !finished) {
-        finished = true;
-        stageIdx = STAGES.length-1;
-        spawnFinalSmoke();
-        msgEl.textContent = '🏆 BONUS! CAR DESTROYED! 🏆';
-        return;
-    }
-
-    const msgs = {
-        left:  ['💥 LEFT HOOK!', '💥 DOOR SMASH!', '💥 CRACK!'],
-        right: ['💥 RIGHT JAB!', '💥 FENDER BASH!', '💥 CRUNCH!'],
-        top:   ['💥 ROOF SMASH!', '💥 WINDSHIELD!', '💥 GLASS!'],
-        center:['💥 GRILL PUNCH!','💥 HEADLIGHTS!', '💥 SMASH!'],
-        bottom:['💥 UNDERCARRIAGE!','💥 CHASSIS HIT!','💥 BANG!']
-    };
-    const pool = msgs[zone] || ['💥 HIT!'];
-    msgEl.textContent = pool[Math.floor(Math.random()*pool.length)];
-});
-
-// ─── GÜNCELLEME ───────────────────────────────────────────────────────────
-function update() {
-    // Sarsıntı sönümleme
-    shakeMag *= shakeDecay;
-    if (shakeMag < 0.5) shakeMag = 0;
-
-    // Flash zamanlayıcısı
-    if (flashTimer > 0) flashTimer--;
-
-    // Orta hasar duman pufleri (stageIdx >= 5)
-    if (stageIdx >= 5 && !finished) {
-        smokePufTimer++;
-        if (smokePufTimer > 90) {
-            smokePufTimer = 0;
-            spawnSmokePuff();
+        stageKey = '02';
+        if (leftDamage >= 2) {
+            overlayL = '04'; // driver door open
+            isPristine = false;
+        } else if (leftDamage >= 1) {
+            overlayL = '03'; // left window cracked
+            isPristine = false;
+        }
+        if (rightDamage >= 1) {
+            overlayR = '06'; // right window cracked
+            isPristine = false;
         }
     }
 
-    // Parçacıklar
-    for (let i = particles.length-1; i >= 0; i--) {
+    return { stageKey, overlayL, overlayR, isPristine };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. HIT LOGIC & DEDICATED PARTICLE EMISSION
+// ═══════════════════════════════════════════════════════════════════════════
+function getCarHitBounds() {
+    const w = 189 * SC;
+    const h = 98  * SC;
+    const x = CX - w / 2;
+    const y = GROUND_Y - h;
+    return { x, y, w, h };
+}
+
+function handleHit(hitX, hitY) {
+    if (isFinished) return;
+    initAudio();
+
+    const cb = getCarHitBounds();
+    if (hitX < cb.x - 15 || hitX > cb.x + cb.w + 15 || hitY < cb.y - 15 || hitY > cb.y + cb.h + 15) {
+        return;
+    }
+
+    const atk = ATTACK_DATA[currentAttack];
+    const prevDamage = totalDamage;
+
+    const relX = (hitX - cb.x) / cb.w;
+    const relY = (hitY - cb.y) / cb.h;
+
+    let zone = 'center';
+    let isGlassHit = false;
+
+    if (relY < 0.42) {
+        zone = 'roof';
+        roofDamage += atk.dmg;
+        // Glass only exists before roof is sheared off (totalDamage < 6)
+        if (totalDamage < 6) isGlassHit = true;
+    } else if (relX < 0.38) {
+        zone = 'left';
+        leftDamage += atk.dmg;
+        if (relY < 0.55 && leftDamage <= 2 && totalDamage < 6) isGlassHit = true;
+    } else if (relX > 0.62) {
+        zone = 'right';
+        rightDamage += atk.dmg;
+        if (relY < 0.55 && rightDamage <= 2 && totalDamage < 6) isGlassHit = true;
+    } else {
+        zone = 'hood';
+        hoodDamage += atk.dmg;
+    }
+
+    totalDamage = Math.min(totalDamage + atk.dmg, MAX_HEALTH);
+
+    // Authentic Rapid Horizontal Shudder
+    shudderMag = atk.shudder;
+    shudderTime = 8;
+
+    // Screen Shake & Hit Stop
+    shakeTrauma = Math.min(shakeTrauma + atk.shake, 20);
+    if (currentAttack === 'hp' || currentAttack === 'kick') hitStopFrames = 2;
+    if (currentAttack === 'sp') hitStopFrames = 3;
+
+    // Accurate Audio
+    playSound(atk.sfx);
+    if (isGlassHit) {
+        playSound('glass');
+    } else {
+        playSound('metal');
+    }
+
+    // Hit Spark
+    spawnHitSpark(hitX, hitY, currentAttack === 'sp' ? 30 : (currentAttack === 'hp' ? 22 : 16));
+
+    // Floating Score Popup
+    score += atk.pts;
+    spawnScorePopup(hitX, hitY - 10, `+${atk.pts}`);
+
+    // Combo Counter
+    comboCount++;
+    comboTimer = 70;
+
+    // ACCURATE PARTICLE EMISSION: Glass only on glass, metal on metal!
+    if (isGlassHit) {
+        const count = 3 * atk.dmg;
+        for (let i = 0; i < count; i++) {
+            const id = GLASS_SHARDS[Math.floor(Math.random() * GLASS_SHARDS.length)];
+            const vx = (Math.random() - 0.5) * 8 + (zone === 'left' ? -2 : (zone === 'right' ? 2 : 0));
+            const vy = -Math.random() * 7 - 2;
+            spawnPhysParticle(hitX, hitY, id, vx, vy, 0.4, 0.45, 2);
+        }
+    } else {
+        // METAL PIECES & SPARKS ONLY (NO GLASS!)
+        const count = 2 * atk.dmg;
+        for (let i = 0; i < count; i++) {
+            const id = METAL_PIECES[Math.floor(Math.random() * METAL_PIECES.length)];
+            const vx = (Math.random() - 0.5) * 7;
+            const vy = -Math.random() * 6 - 2;
+            spawnPhysParticle(hitX, hitY, id, vx, vy, 0.45, 0.35, 2);
+        }
+        for (let i = 0; i < atk.dmg; i++) {
+            const id = SPARK_PIECES[Math.floor(Math.random() * SPARK_PIECES.length)];
+            const vx = (Math.random() - 0.5) * 9;
+            const vy = -Math.random() * 8 - 2;
+            spawnPhysParticle(hitX, hitY, id, vx, vy, 0.35, 0.5, 1);
+        }
+    }
+
+    // Milestone Detached Panels
+    checkMilestones(prevDamage, totalDamage);
+
+    // Victory Check
+    if (totalDamage >= MAX_HEALTH && !isFinished) {
+        finishBonusStage();
+    }
+}
+
+function checkMilestones(before, after) {
+    const cb = getCarHitBounds();
+
+    // 1. Roof sheared off (passes 6) -> Roof panel flies!
+    if (before < 6 && after >= 6) {
+        playSound('metal');
+        spawnPhysParticle(cb.x + cb.w * 0.4, cb.y + 20, '16', -3.5, -9.5, 0.38, 0.3, 2, 0.08);
+        for (let i = 0; i < 10; i++) {
+            const id = GLASS_SHARDS[Math.floor(Math.random() * GLASS_SHARDS.length)];
+            spawnPhysParticle(cb.x + cb.w * 0.4, cb.y + 20, id, (Math.random() - 0.5) * 10, -Math.random() * 8 - 3);
+        }
+    }
+
+    // 2. Hood pops open (passes 14) -> Metal scrap flies
+    if (before < 14 && after >= 14) {
+        playSound('metal');
+        spawnPhysParticle(cb.x + cb.w * 0.65, cb.y + 50, '17', 3.5, -8, 0.4, 0.4, 2);
+        spawnPhysParticle(cb.x + cb.w * 0.6, cb.y + 50, '18', -2, -7, 0.4, 0.4, 2);
+    }
+
+    // 3. Hood crushed -> Steam starts hissing (passes 18)
+    if (before < 18 && after >= 18) {
+        spawnAnimParticle(cb.x + cb.w * 0.68, cb.y + 40, ANIM_STEAM, 5, 2.0);
+    }
+
+    // 4. Hood torn off (passes 23) -> Hood panel flies!
+    if (before < 23 && after >= 23) {
+        playSound('metal');
+        spawnPhysParticle(cb.x + cb.w * 0.7, cb.y + 35, '19', 3.8, -10.5, 0.38, 0.35, 2, 0.06);
+        spawnAnimParticle(cb.x + cb.w * 0.68, cb.y + 40, ANIM_FIRE, 4, 2.2);
+    }
+
+    // 5. Demolished shell (passes 28) -> License plate flies!
+    if (before < 28 && after >= 28) {
+        playSound('metal');
+        spawnPhysParticle(cb.x + cb.w * 0.55, cb.y + 70, '20', 2, -6.5, 0.35, 0.55, 4, 0.12);
+    }
+}
+
+function finishBonusStage() {
+    isFinished = true;
+    totalDamage = MAX_HEALTH;
+    clearInterval(timerInterval);
+
+    playSound('collapse');
+    setTimeout(() => playSound('victory'), 500);
+
+    const cb = getCarHitBounds();
+
+    // Wheel pops off and rolls/bounces across the dock to the right!
+    spawnPhysParticle(cb.x + cb.w * 0.82, cb.y + 70, '22', 6.5, -7.5, 0.4, 0.65, 5, 0.14);
+
+    // Window frame pops off
+    spawnPhysParticle(cb.x + cb.w * 0.3, cb.y + 50, '21', -3.5, -8.5, 0.38, 0.4, 2, 0.08);
+
+    // Initial big eruption
+    spawnAnimParticle(cb.x + cb.w * 0.65, cb.y + 30, ANIM_FIRE, 4, 2.5);
+    spawnAnimParticle(cb.x + cb.w * 0.35, cb.y + 30, ANIM_STEAM, 5, 2.0);
+
+    // Authentic Vertical Fire & Steam Fountains from the wrecked engine
+    persistentFx.push({
+        type: 'anim', frames: ANIM_FIRE, fi: 0, timer: 0, speed: 5,
+        x: CX + 45, y: GROUND_Y - 95, scale: 2.2
+    });
+    persistentFx.push({
+        type: 'anim', frames: ANIM_STEAM, fi: 1, timer: 0, speed: 6,
+        x: CX - 55, y: GROUND_Y - 105, scale: 2.0
+    });
+    persistentFx.push({
+        type: 'anim', frames: ANIM_SMOKE, fi: 0, timer: 0, speed: 7,
+        x: CX, y: GROUND_Y - 110, scale: 2.4
+    });
+
+    score += 30000;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 7. PARTICLES & FX
+// ═══════════════════════════════════════════════════════════════════════════
+function spawnPhysParticle(x, y, id, vx, vy, gy=0.4, bounce=0.4, bounces=2, rotSpeed=0) {
+    particles.push({
+        type: 'physics', id, x, y, vx, vy, gy, bounce, bounces,
+        rot: Math.random() * Math.PI * 2,
+        rotSpeed: rotSpeed || ((Math.random() - 0.5) * 0.25),
+        life: 130, maxLife: 130
+    });
+}
+
+function spawnAnimParticle(x, y, frames, speed=4, scale=1.5) {
+    particles.push({
+        type: 'anim', x, y, frames, fi: 0, timer: 0, speed, scale
+    });
+}
+
+function spawnHitSpark(x, y, radius=18) {
+    hitSparks.push({
+        x, y, radius, maxRadius: radius,
+        spokes: 8, life: 9, maxLife: 9
+    });
+}
+
+function spawnScorePopup(x, y, text) {
+    scorePopups.push({
+        x, y, text, vy: -1.6, life: 32, maxLife: 32
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. UPDATE LOOP
+// ═══════════════════════════════════════════════════════════════════════════
+function update() {
+    if (hitStopFrames > 0) {
+        hitStopFrames--;
+        return;
+    }
+
+    // Rapid Shudder Vibration
+    if (shudderTime > 0) {
+        shudderTime--;
+        shudderMag *= 0.75;
+    } else {
+        shudderMag = 0;
+    }
+
+    // Screen Shake Trauma Decay
+    shakeTrauma *= 0.85;
+    if (shakeTrauma < 0.3) shakeTrauma = 0;
+
+    // Combo Timer Decay
+    if (comboTimer > 0) {
+        if (--comboTimer === 0) comboCount = 0;
+    }
+
+    // Update Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         if (p.type === 'physics') {
             p.x  += p.vx;
             p.y  += p.vy;
             p.vy += p.gy;
-            // Zemine çarpma
+            p.rot += p.rotSpeed;
+
+            // Bounce on Floor
             if (p.y >= GROUND_Y && p.bounces > 0) {
                 p.y  = GROUND_Y;
                 p.vy = -p.vy * p.bounce;
                 p.vx *= 0.75;
+                p.rotSpeed *= 0.65;
                 p.bounces--;
-                // Sekme tozu
-                addAnim(p.x, GROUND_Y, SMOKE_ANIM, 5, 0.5);
+                if (Math.abs(p.vy) > 1.5) {
+                    spawnAnimParticle(p.x, GROUND_Y, ANIM_PUFF, 4, 0.7);
+                }
             }
-            if (--p.life <= 0 || p.y > GROUND_Y + 50) { particles.splice(i,1); }
-        } else {
+
+            if (--p.life <= 0 || p.y > GROUND_Y + 70) {
+                particles.splice(i, 1);
+            }
+        } else if (p.type === 'anim') {
             if (++p.timer >= p.speed) {
                 p.timer = 0;
                 if (++p.fi >= p.frames.length) {
-                    if (!p.persist) { particles.splice(i,1); continue; }
-                    p.fi = 0;
+                    particles.splice(i, 1);
                 }
             }
         }
     }
 
-    // Kalıcı dumanlar
-    persistFx.forEach(p => {
-        if (++p.timer >= p.speed) { p.timer=0; p.fi=(p.fi+1)%p.frames.length; }
-    });
-}
-
-// ─── ÇİZİM ────────────────────────────────────────────────────────────────
-function drawImg(id, x, y, sc=SC) {
-    const im = S(id);
-    if (!im || !im.complete) return;
-    ctx.drawImage(im, x, y, im.naturalWidth*sc, im.naturalHeight*sc);
-}
-
-function drawAnimPart(p) {
-    const im = S(p.frames[p.fi]);
-    if (!im) return;
-    const sc = (p.scale||1) * SC;
-    ctx.drawImage(im, p.x-im.naturalWidth*sc/2, p.y-im.naturalHeight*sc/2,
-                  im.naturalWidth*sc, im.naturalHeight*sc);
-}
-
-function draw() {
-    ctx.save();
-
-    // Sarsıntı
-    const sx = shakeMag > 0.5 ? (Math.random()-0.5)*shakeMag*2 : 0;
-    const sy = shakeMag > 0.5 ? (Math.random()-0.5)*shakeMag   : 0;
-    ctx.translate(sx, sy);
-
-    ctx.clearRect(-10, -10, canvas.width+20, canvas.height+20);
-
-    // 1. ŞASE
-    const ch = chassisRect();
-    drawImg('00', ch.x, ch.y);
-
-    // 2. YEŞİL ARABA (flash varsa üstüne kısa süreliğine flash sprite)
-    const cr = currentCarRect();
-    const displayId = (flashTimer > 0 && flashSprite) ? flashSprite : STAGES[stageIdx];
-    // Flash sprite'ı aynı konuma çiz (cr bazlı)
-    const fid = (flashTimer > 0 && flashSprite) ? flashSprite : null;
-    drawImg(STAGES[stageIdx], cr.x, cr.y);
-
-    // Flash overlay — yarı saydam üst üste
-    if (flashTimer > 0 && flashSprite) {
-        ctx.globalAlpha = flashTimer / FLASH_DUR * 0.9;
-        const fr = carRect(flashSprite);
-        drawImg(flashSprite, fr.x, fr.y);
-        ctx.globalAlpha = 1;
-    }
-
-    // 3. Kalıcı dumanlar
-    persistFx.forEach(drawAnimPart);
-
-    // 4. Parçacıklar
-    particles.forEach(p => {
-        if (p.type === 'physics') {
-            const im = S(p.id);
-            if (!im) return;
-            ctx.globalAlpha = p.life / p.maxLife;
-            ctx.drawImage(im, p.x-im.naturalWidth*SC/2, p.y-im.naturalHeight*SC/2,
-                          im.naturalWidth*SC, im.naturalHeight*SC);
-            ctx.globalAlpha = 1;
-        } else {
-            drawAnimPart(p);
+    // Update Persistent Effects
+    persistentFx.forEach(p => {
+        if (++p.timer >= p.speed) {
+            p.timer = 0;
+            p.fi = (p.fi + 1) % p.frames.length;
         }
     });
 
-    // Zemin gölgesi
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    // Update Hit Sparks
+    for (let i = hitSparks.length - 1; i >= 0; i--) {
+        const s = hitSparks[i];
+        if (--s.life <= 0) hitSparks.splice(i, 1);
+    }
+
+    // Update Score Popups
+    for (let i = scorePopups.length - 1; i >= 0; i--) {
+        const sp = scorePopups[i];
+        sp.y += sp.vy;
+        if (--sp.life <= 0) scorePopups.splice(i, 1);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. RENDER LOOP (WITH ON-CANVAS RETRO HUD)
+// ═══════════════════════════════════════════════════════════════════════════
+function draw() {
+    ctx.save();
+
+    // 1. Screen Shake
+    if (shakeTrauma > 0.4) {
+        const sx = (Math.random() - 0.5) * shakeTrauma * 1.5;
+        const sy = (Math.random() - 0.5) * shakeTrauma * 1.0;
+        ctx.translate(sx, sy);
+    }
+
+    // 2. Draw Authentic SF2 Harbor Stage Background (384x224 scaled 2x to 768x448)
+    if (bgImg.complete) {
+        ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+    } else {
+        ctx.fillStyle = '#1a5a8a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // 3. Ground Shadow
+    const shadowW = 189 * SC * 0.95;
+    ctx.fillStyle = 'rgba(10, 5, 0, 0.45)';
     ctx.beginPath();
-    ctx.ellipse(CX, GROUND_Y+3, ch.w*0.46, 8, 0, 0, Math.PI*2);
+    ctx.ellipse(CX, GROUND_Y + 2, shadowW / 2, 7, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // 4. DRAW THE CAR (BOTTOM-ALIGNED, NO UPWARD DRIFT, NO WHEEL MISALIGNMENT)
+    const state = getCarState();
+    ctx.save();
+
+    // Horizontal shudder vibration on impact
+    const shudderX = (shudderTime > 0) ? Math.sin(shudderTime * 4.5) * shudderMag : 0;
+    ctx.translate(CX + shudderX, GROUND_Y);
+
+    const carLeft = - (189 * SC) / 2;
+
+    if (state.isPristine) {
+        // Pristine stage: single complete sprite with wheels and body perfectly merged!
+        const pristineImg = S('car_intact');
+        if (pristineImg && pristineImg.complete) {
+            ctx.drawImage(pristineImg, carLeft, -98 * SC, pristineImg.naturalWidth * SC, pristineImg.naturalHeight * SC);
+        }
+    } else {
+        const cfg = STAGE_CONFIG[state.stageKey];
+
+        // A. Draw Chassis
+        const chImg = S(cfg.ch);
+        if (chImg && chImg.complete) {
+            if (cfg.ch === '00') {
+                // Intact chassis: touches ground at 0, height 82
+                ctx.drawImage(chImg, carLeft + 0 * SC, -82 * SC, chImg.naturalWidth * SC, chImg.naturalHeight * SC);
+            } else {
+                // Crushed chassis '01': touches ground at 0, height 63
+                ctx.drawImage(chImg, carLeft + 2 * SC, -63 * SC, chImg.naturalWidth * SC, chImg.naturalHeight * SC);
+            }
+        }
+
+        // B. Draw Main Car Body (Bottom-aligned: bottom stays at baselineOffset)
+        const bdImg = S(cfg.bd);
+        if (bdImg && bdImg.complete) {
+            const bodyY = -cfg.baselineOffset * SC - cfg.h * SC;
+            ctx.drawImage(bdImg, carLeft + cfg.dx * SC, bodyY, bdImg.naturalWidth * SC, bdImg.naturalHeight * SC);
+        }
+
+        // C. Draw Regional Overlays (if still on stage 02)
+        if (state.stageKey === '02') {
+            const bodyY = -13 * SC - 85 * SC;
+            if (state.overlayL) {
+                const ol = S(state.overlayL);
+                if (ol && ol.complete) {
+                    ctx.drawImage(ol, carLeft + 2 * SC, bodyY, ol.naturalWidth * SC, ol.naturalHeight * SC);
+                }
+            }
+            if (state.overlayR) {
+                const or_img = S(state.overlayR);
+                if (or_img && or_img.complete) {
+                    ctx.drawImage(or_img, carLeft + (2 + 95) * SC, bodyY, or_img.naturalWidth * SC, or_img.naturalHeight * SC);
+                }
+            }
+        }
+    }
+
+    ctx.restore(); // Restore car transform
+
+    // 5. Draw Persistent Fire & Steam
+    persistentFx.forEach(drawAnimParticle);
+
+    // 6. Draw Physics Particles
+    particles.forEach(p => {
+        if (p.type === 'physics') {
+            const im = S(p.id);
+            if (!im || !im.complete) return;
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.rot);
+            ctx.globalAlpha = Math.min(p.life / 20, 1.0);
+            const pw = im.naturalWidth * SC;
+            const ph = im.naturalHeight * SC;
+            ctx.drawImage(im, -pw / 2, -ph / 2, pw, ph);
+            ctx.restore();
+        } else if (p.type === 'anim') {
+            drawAnimParticle(p);
+        }
+    });
+
+    // 7. Draw Hit Sparks
+    hitSparks.forEach(s => {
+        const progress = 1 - (s.life / s.maxLife);
+        const curR = s.radius * (1 + progress * 0.4);
+        ctx.save();
+        ctx.translate(s.x, s.y);
+
+        // Core glow
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath();
+        ctx.arc(0, 0, curR * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(0, 0, curR * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 8-Pointed Star Spokes
+        ctx.strokeStyle = '#ffcc00';
+        ctx.lineWidth = 3;
+        for (let i = 0; i < s.spokes; i++) {
+            const ang = (i * Math.PI * 2) / s.spokes + progress;
+            const r1 = curR * 0.3;
+            const r2 = curR * (1 - progress * 0.25);
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(ang) * r1, Math.sin(ang) * r1);
+            ctx.lineTo(Math.cos(ang) * r2, Math.sin(ang) * r2);
+            ctx.stroke();
+        }
+        ctx.restore();
+    });
+
+    // 8. Draw Floating Score Popups
+    scorePopups.forEach(sp => {
+        ctx.save();
+        ctx.font = '11px "Press Start 2P", monospace';
+        ctx.fillStyle = '#ffcc00';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = Math.min(sp.life / 12, 1.0);
+        ctx.strokeText(sp.text, sp.x - 15, sp.y);
+        ctx.fillText(sp.text, sp.x - 15, sp.y);
+        ctx.restore();
+    });
+
+    // 9. ON-CANVAS RETRO ARCADE HUD
+    drawArcadeHUD();
+
+    // 10. Victory Banner
+    if (isFinished) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+        ctx.fillRect(0, 80, canvas.width, 68);
+
+        ctx.font = '20px "Press Start 2P", monospace';
+        ctx.fillStyle = '#ffd700';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 4;
+        ctx.textAlign = 'center';
+        ctx.strokeText('🏆 PERFECT! BONUS 30000 PTS 🏆', canvas.width / 2, 122);
+        ctx.fillText('🏆 PERFECT! BONUS 30000 PTS 🏆', canvas.width / 2, 122);
+        ctx.restore();
+    }
+
+    ctx.restore(); // Restore screen shake
+}
+
+function drawAnimParticle(p) {
+    const im = S(p.frames[p.fi]);
+    if (!im || !im.complete) return;
+    const sc = (p.scale || 1.5) * SC;
+    const w = im.naturalWidth * sc;
+    const h = im.naturalHeight * sc;
+    ctx.drawImage(im, p.x - w / 2, p.y - h / 2, w, h);
+}
+
+function drawArcadeHUD() {
+    ctx.save();
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.textBaseline = 'top';
+
+    // 1P SCORE
+    ctx.fillStyle = '#e52521';
+    ctx.fillText('1P', 32, 16);
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText(String(score).padStart(6, '0'), 32, 34);
+
+    // TIME
+    ctx.fillStyle = '#e52521';
+    ctx.textAlign = 'right';
+    ctx.fillText('TIME', canvas.width - 32, 16);
+    ctx.fillStyle = timer <= 10 ? '#ff3300' : '#ffd700';
+    ctx.fillText(String(timer).padStart(2, '0'), canvas.width - 32, 34);
+
+    // STAGE TITLE
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText('BONUS STAGE', canvas.width / 2, 16);
+
+    // CAR INTEGRITY BAR
+    const barW = 200;
+    const barH = 12;
+    const barX = (canvas.width - barW) / 2;
+    const barY = 34;
+
+    ctx.fillStyle = '#220000';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(barX, barY, barW, barH);
+
+    const pct = Math.max(0, 1 - (totalDamage / MAX_HEALTH));
+    if (pct > 0) {
+        ctx.fillStyle = pct > 0.5 ? '#00e676' : (pct > 0.25 ? '#ffd700' : '#ff1744');
+        ctx.fillRect(barX + 1, barY + 1, (barW - 2) * pct, barH - 2);
+    }
+
+    // COMBO TEXT
+    if (comboCount > 1 && !isFinished) {
+        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.fillStyle = '#ff9100';
+        ctx.textAlign = 'center';
+        ctx.fillText(`💥 ${comboCount} HITS!`, canvas.width / 2, 54);
+    }
 
     ctx.restore();
 }
 
-// ─── ANA DÖNGÜ ────────────────────────────────────────────────────────────
-function init() {
-    (function loop() { update(); draw(); requestAnimationFrame(loop); })();
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. CONTROLS & GAME LOOP
+// ═══════════════════════════════════════════════════════════════════════════
+function resetGame() {
+    initAudio();
+    totalDamage = 0;
+    leftDamage = 0;
+    rightDamage = 0;
+    roofDamage = 0;
+    hoodDamage = 0;
+    isFinished = false;
+    score = 0;
+    timer = 40;
+    comboCount = 0;
+    comboTimer = 0;
+    shudderMag = 0;
+    shudderTime = 0;
+    shakeTrauma = 0;
+    particles.length = 0;
+    persistentFx.length = 0;
+    scorePopups.length = 0;
+    hitSparks.length = 0;
+
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        if (!isFinished && timer > 0) {
+            timer--;
+            if (timer === 0) finishBonusStage();
+        }
+    }, 1000);
+}
+
+// Pointer Event for Mouse / Touch
+canvas.addEventListener('pointerdown', e => {
+    const r = canvas.getBoundingClientRect();
+    const mx = (e.clientX - r.left) * (canvas.width / r.width);
+    const my = (e.clientY - r.top) * (canvas.height / r.height);
+    handleHit(mx, my);
+});
+
+// Keyboard Shortcuts
+window.addEventListener('keydown', e => {
+    if (e.key === '1' || e.key.toLowerCase() === 'q') setAttack('lp');
+    if (e.key === '2' || e.key.toLowerCase() === 'w') setAttack('hp');
+    if (e.key === '3' || e.key.toLowerCase() === 'e') setAttack('kick');
+    if (e.key === '4' || e.key.toLowerCase() === 'r') setAttack('sp');
+
+    if (e.code === 'Space' || e.key === 'Enter') {
+        e.preventDefault();
+        const cb = getCarHitBounds();
+        const randX = cb.x + cb.w * (0.35 + Math.random() * 0.3);
+        const randY = cb.y + cb.h * (0.35 + Math.random() * 0.3);
+        handleHit(randX, randY);
+    }
+});
+
+function initGame() {
+    resetGame();
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
 }
 </script>
 </body>
